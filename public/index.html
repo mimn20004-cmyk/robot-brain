@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ARIA — عقل روبوت</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Tajawal:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:       #080c10;
+    --surface:  #0d1117;
+    --border:   #1a2332;
+    --accent:   #00d4ff;
+    --accent2:  #0088aa;
+    --text:     #c9d1d9;
+    --muted:    #4a5568;
+    --user-bg:  #0d2137;
+    --ai-bg:    #0a1a0f;
+    --ai-border:#00d4ff22;
+    --green:    #39d353;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Tajawal', sans-serif;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Scan line overlay ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,212,255,0.015) 2px,
+      rgba(0,212,255,0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* ── Header ── */
+  #header {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .logo-ring {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    animation: pulse-ring 3s ease-in-out infinite;
+  }
+
+  .logo-ring::before {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--accent2) 0%, transparent 70%);
+  }
+
+  @keyframes pulse-ring {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0,212,255,0.4), 0 0 12px rgba(0,212,255,0.2); }
+    50%       { box-shadow: 0 0 0 6px rgba(0,212,255,0),  0 0 20px rgba(0,212,255,0.4); }
+  }
+
+  #status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.5s;
+    flex-shrink: 0;
+  }
+  #status-dot.ready   { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  #status-dot.loading { background: var(--accent); animation: blink 1s infinite; }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Messages area ── */
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+  }
+
+  #messages::-webkit-scrollbar { width: 4px; }
+  #messages::-webkit-scrollbar-track { background: transparent; }
+  #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── Message bubbles ── */
+  .msg {
+    display: flex;
+    gap: 12px;
+    animation: fadeUp 0.25s ease-out;
+    max-width: 780px;
+  }
+
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(10px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+
+  .msg.user  { align-self: flex-end; flex-direction: row-reverse; }
+  .msg.aria  { align-self: flex-start; }
+
+  .avatar {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .msg.user .avatar {
+    background: var(--user-bg);
+    border: 1px solid #1e4d6b;
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .msg.aria .avatar {
+    background: var(--ai-bg);
+    border: 1px solid var(--accent2);
+    color: var(--accent);
+    font-size: 16px;
+  }
+
+  .bubble {
+    padding: 12px 16px;
+    border-radius: 12px;
+    line-height: 1.7;
+    font-size: 15px;
+    max-width: calc(100% - 46px);
+    word-break: break-word;
+  }
+
+  .msg.user .bubble {
+    background: var(--user-bg);
+    border: 1px solid #1e4d6b;
+    color: #a8d8f0;
+    border-radius: 12px 4px 12px 12px;
+  }
+
+  .msg.aria .bubble {
+    background: var(--ai-bg);
+    border: 1px solid var(--ai-border);
+    color: var(--text);
+    border-radius: 4px 12px 12px 12px;
+    position: relative;
+  }
+
+  .msg.aria .bubble::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0; left: 0;
+    height: 1px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    border-radius: 4px 12px 0 0;
+  }
+
+  /* ── Typing cursor ── */
+  .cursor {
+    display: inline-block;
+    width: 2px; height: 16px;
+    background: var(--accent);
+    margin-right: 2px;
+    vertical-align: middle;
+    animation: blink 0.8s infinite;
+  }
+
+  /* ── System messages ── */
+  .sys-msg {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    padding: 4px 0;
+  }
+
+  /* ── Input area ── */
+  #input-area {
+    border-top: 1px solid var(--border);
+    padding: 16px 24px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  #input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+
+  #msg-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-family: 'Tajawal', sans-serif;
+    font-size: 15px;
+    resize: none;
+    outline: none;
+    min-height: 48px;
+    max-height: 140px;
+    overflow-y: auto;
+    transition: border-color 0.2s;
+    line-height: 1.5;
+  }
+
+  #msg-input:focus { border-color: var(--accent2); }
+  #msg-input::placeholder { color: var(--muted); }
+
+  #send-btn {
+    width: 48px; height: 48px;
+    border-radius: 10px;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+    color: var(--bg);
+  }
+
+  #send-btn:hover:not(:disabled) {
+    background: #33ddff;
+    box-shadow: 0 0 16px rgba(0,212,255,0.4);
+  }
+
+  #send-btn:disabled { background: var(--muted); cursor: not-allowed; }
+
+  /* ── Toolbar (teach, memory, clear) ── */
+  #toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    max-width: 860px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .tool-btn {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; gap: 5px;
+  }
+
+  .tool-btn:hover {
+    border-color: var(--accent2);
+    color: var(--accent);
+  }
+
+  /* ── Memory panel ── */
+  #memory-panel {
+    display: none;
+    position: fixed;
+    top: 60px; left: 0; bottom: 80px;
+    width: 280px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    z-index: 10;
+    animation: slideIn 0.2s ease;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(-20px); opacity: 0; }
+    to   { transform: translateX(0);     opacity: 1; }
+  }
+
+  #memory-panel.open { display: block; }
+
+  /* ── Teach modal ── */
+  #teach-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #teach-modal.open { display: flex; }
+
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    width: 90%;
+    max-width: 460px;
+  }
+
+  .modal-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: 'Tajawal', sans-serif;
+    font-size: 15px;
+    outline: none;
+    margin: 14px 0;
+  }
+
+  .modal-input:focus { border-color: var(--accent2); }
+
+  /* ── Stats cards ── */
+  .stat-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    margin-bottom: 2px;
+  }
+
+  .stat-val {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  /* ── Welcome screen ── */
+  #welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 12px;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    padding: 40px;
+    text-align: center;
+  }
+
+  #welcome .big { font-size: 42px; line-height: 1; }
+  #welcome h2  { color: var(--text); font-size: 18px; font-weight: 500; font-family: 'Tajawal', sans-serif; }
+
+  /* ── Loading bar ── */
+  #loading-bar {
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    display: none;
+  }
+
+  #loading-bar.active { display: block; }
+
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Loading bar -->
+<div id="loading-bar"></div>
+
+<!-- Header -->
+<div id="header">
+  <div class="logo-ring">
+    <span style="font-size:16px;position:relative;z-index:1;">🤖</span>
+  </div>
+  <div style="flex:1;">
+    <div style="font-weight:700;font-size:16px;letter-spacing:2px;color:var(--accent);font-family:'IBM Plex Mono',monospace;">ARIA</div>
+    <div id="status-text" style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;">جاري التحميل...</div>
+  </div>
+  <div id="status-dot" class="loading"></div>
+  <div id="mem-stats" style="font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;text-align:left;display:none;">
+    <div id="stat-mem">— ذكريات</div>
+    <div id="stat-conv">— محادثة</div>
+  </div>
+</div>
+
+<!-- Memory Panel -->
+<div id="memory-panel">
+  <div style="font-size:12px;color:var(--accent);font-family:'IBM Plex Mono',monospace;margin-bottom:14px;letter-spacing:1px;">MEMORY.DB</div>
+  <div id="memory-content"></div>
+</div>
+
+<!-- Messages -->
+<div id="messages">
+  <div id="welcome">
+    <div class="big">🧠</div>
+    <h2>ARIA جاهزة للمحادثة</h2>
+    <div>ابدأ بكتابة رسالة أو علّمها معلومة جديدة</div>
+    <div style="margin-top:8px;color:var(--border);font-size:10px;">AI يعمل محلياً — لا إنترنت، لا سحابة</div>
+  </div>
+</div>
+
+<!-- Input Area -->
+<div id="input-area">
+  <div id="toolbar">
+    <button class="tool-btn" onclick="openTeach()">⚡ علّم</button>
+    <button class="tool-btn" onclick="toggleMemory()">💾 الذاكرة</button>
+    <button class="tool-btn" onclick="clearMemory()">🗑 مسح</button>
+    <button class="tool-btn" id="remember-btn" onclick="toggleRemember()">📌 احفظ المحادثة</button>
+  </div>
+  <div id="input-row">
+    <textarea id="msg-input" placeholder="اكتب رسالتك..." rows="1" disabled></textarea>
+    <button id="send-btn" onclick="sendMessage()" disabled>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"></line>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<!-- Teach Modal -->
+<div id="teach-modal">
+  <div class="modal-box">
+    <div style="font-size:14px;color:var(--accent);font-family:'IBM Plex Mono',monospace;margin-bottom:4px;">⚡ علّم ARIA معلومة جديدة</div>
+    <div style="font-size:13px;color:var(--muted);">ستُحفظ في الذاكرة الدائمة وتُستخدم في المحادثات القادمة</div>
+    <textarea id="teach-input" class="modal-input" rows="3" placeholder="مثال: اسمي أحمد وأنا مهندس برمجيات من القاهرة"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="tool-btn" onclick="closeTeach()">إلغاء</button>
+      <button onclick="submitTeach()" style="padding:7px 18px;border-radius:6px;background:var(--accent);border:none;color:var(--bg);font-family:'Tajawal',sans-serif;font-size:14px;cursor:pointer;font-weight:700;">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ───────────────────────────────────────────────────
+let isReady     = false;
+let isStreaming = false;
+let rememberNext = false;
+let memoryOpen  = false;
+
+// ── Check AI Status ─────────────────────────────────────────
+async function checkStatus() {
+  try {
+    const res  = await fetch("/api/status");
+    const data = await res.json();
+
+    if (data.ready) {
+      isReady = true;
+      document.getElementById("status-dot").className  = "ready";
+      document.getElementById("status-text").textContent = "جاهزة • محلي 100%";
+      document.getElementById("status-text").style.color = "var(--green)";
+      document.getElementById("msg-input").disabled  = false;
+      document.getElementById("send-btn").disabled   = false;
+      document.getElementById("loading-bar").classList.remove("active");
+
+      if (data.stats) updateStats(data.stats);
+    } else {
+      setTimeout(checkStatus, 2000);
+    }
+  } catch {
+    setTimeout(checkStatus, 3000);
+  }
+}
+
+// ── Update stats display ────────────────────────────────────
+function updateStats(stats) {
+  const s = stats.memory || stats;
+  document.getElementById("mem-stats").style.display = "block";
+  document.getElementById("stat-mem").textContent    = `${s.memories || 0} ذكريات`;
+  document.getElementById("stat-conv").textContent   = `${s.conversations || 0} محادثة`;
+}
+
+// ── Add message to UI ───────────────────────────────────────
+function addMessage(role, content = "") {
+  const welcome = document.getElementById("welcome");
+  if (welcome) welcome.remove();
+
+  const msgs = document.getElementById("messages");
+  const div  = document.createElement("div");
+  div.className = `msg ${role}`;
+
+  const avatar = role === "user"
+    ? `<div class="avatar">أنت</div>`
+    : `<div class="avatar">🤖</div>`;
+
+  div.innerHTML = `
+    ${avatar}
+    <div class="bubble" id="bubble-${Date.now()}">${content}</div>
+  `;
+
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div.querySelector(".bubble");
+}
+
+function addSystem(text) {
+  const msgs = document.getElementById("messages");
+  const div  = document.createElement("div");
+  div.className = "sys-msg";
+  div.textContent = text;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ── Send Message ────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById("msg-input");
+  const text  = input.value.trim();
+  if (!text || isStreaming) return;
+
+  input.value  = "";
+  input.style.height = "auto";
+  isStreaming  = true;
+  document.getElementById("send-btn").disabled = true;
+  document.getElementById("loading-bar").classList.add("active");
+
+  addMessage("user", text);
+
+  const bubble = addMessage("aria", '<span class="cursor"></span>');
+  let   fullText = "";
+
+  try {
+    const res = await fetch("/api/chat", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ message: text, remember: rememberNext }),
+    });
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let   buffer  = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.token) {
+            fullText += data.token;
+            bubble.innerHTML = escapeHtml(fullText) + '<span class="cursor"></span>';
+            document.getElementById("messages").scrollTop = 999999;
+          }
+          if (data.done || data.error) {
+            bubble.innerHTML = escapeHtml(fullText);
+          }
+        } catch {}
+      }
+    }
+
+    bubble.innerHTML = escapeHtml(fullText) || "...";
+
+    if (rememberNext) {
+      addSystem("📌 تم حفظ المحادثة في الذاكرة الدائمة");
+      rememberNext = false;
+      document.getElementById("remember-btn").style.color = "";
+    }
+
+    // Refresh stats
+    const statsRes = await fetch("/api/status");
+    const statsData = await statsRes.json();
+    if (statsData.stats) updateStats(statsData.stats);
+
+  } catch (err) {
+    bubble.innerHTML = `<span style="color:var(--muted)">خطأ: ${err.message}</span>`;
+  }
+
+  isStreaming = false;
+  document.getElementById("send-btn").disabled = false;
+  document.getElementById("loading-bar").classList.remove("active");
+  input.focus();
+}
+
+// ── Teach ───────────────────────────────────────────────────
+function openTeach()  { document.getElementById("teach-modal").classList.add("open"); document.getElementById("teach-input").focus(); }
+function closeTeach() { document.getElementById("teach-modal").classList.remove("open"); }
+
+async function submitTeach() {
+  const fact = document.getElementById("teach-input").value.trim();
+  if (!fact) return;
+
+  closeTeach();
+  document.getElementById("teach-input").value = "";
+
+  try {
+    await fetch("/api/teach", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ fact }),
+    });
+    addSystem(`⚡ تم حفظ: "${fact.substring(0, 60)}${fact.length > 60 ? "..." : ""}"`);
+
+    const statsRes = await fetch("/api/status");
+    const statsData = await statsRes.json();
+    if (statsData.stats) updateStats(statsData.stats);
+  } catch (err) {
+    addSystem("❌ فشل الحفظ");
+  }
+}
+
+// ── Memory Panel ────────────────────────────────────────────
+async function toggleMemory() {
+  const panel = document.getElementById("memory-panel");
+  memoryOpen  = !memoryOpen;
+  panel.classList.toggle("open", memoryOpen);
+
+  if (memoryOpen) {
+    const res  = await fetch("/api/memory");
+    const data = await res.json();
+    const s    = data.memory || data;
+    document.getElementById("memory-content").innerHTML = `
+      <div class="stat-card"><div class="stat-label">MEMORIES</div><div class="stat-val">${s.memories || 0}</div></div>
+      <div class="stat-card"><div class="stat-label">CONVERSATIONS</div><div class="stat-val">${s.conversations || 0}</div></div>
+      <div class="stat-card"><div class="stat-label">VOCABULARY</div><div class="stat-val">${s.vocabulary || 0}</div></div>
+    `;
+  }
+}
+
+// ── Clear Memory ─────────────────────────────────────────────
+async function clearMemory() {
+  if (!confirm("مسح كل الذاكرة؟")) return;
+  await fetch("/api/memory", { method: "DELETE" });
+  addSystem("🗑 تم مسح الذاكرة");
+  updateStats({ memories: 0, conversations: 0, vocabulary: 0 });
+}
+
+// ── Remember toggle ──────────────────────────────────────────
+function toggleRemember() {
+  rememberNext = !rememberNext;
+  const btn    = document.getElementById("remember-btn");
+  btn.style.color = rememberNext ? "var(--accent)" : "";
+  btn.style.borderColor = rememberNext ? "var(--accent2)" : "";
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+}
+
+// ── Enter to send ─────────────────────────────────────────────
+document.getElementById("msg-input").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Auto-resize textarea
+document.getElementById("msg-input").addEventListener("input", function() {
+  this.style.height = "auto";
+  this.style.height = Math.min(this.scrollHeight, 140) + "px";
+});
+
+// Close modal on backdrop click
+document.getElementById("teach-modal").addEventListener("click", e => {
+  if (e.target === document.getElementById("teach-modal")) closeTeach();
+});
+
+// ── Boot ──────────────────────────────────────────────────────
+document.getElementById("loading-bar").classList.add("active");
+checkStatus();
+</script>
+</body>
+</html>
